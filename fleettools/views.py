@@ -37,7 +37,7 @@ def fleetmover(request, token_pk: int):
         wings = set()
         squads = set()
 
-        if 'move-fleet' in request.POST and request.POST['move-fleet'] == ['on']:
+        if 'move-fleet' in request.POST and request.POST['move-fleet'] == 'on':
             move_fleet = True
         else:
             move_fleet = False
@@ -76,7 +76,7 @@ def fleetmover(request, token_pk: int):
 
         destination_form = SquadDestinationForm(
             [
-                (f"{wing['id']}-{squad['id']}", squad['name']) for wing in fleet_structure for squad in wing['squads']
+                (f"{wing['id']}-{squad['id']}", f"{wing['name']} -> {squad['name']}") for wing in fleet_structure for squad in wing['squads']
             ],
             request.POST,
         )
@@ -91,12 +91,15 @@ def fleetmover(request, token_pk: int):
 
         for member in fleet_members:
             if move_fleet or member['wing_id'] in wings or member['squad_id'] in squads:
-                move_fleet_member.delay(
-                    fleet_id=fleet_id,
-                    member_id=member['character_id'],
-                    squad_id=int(squad_id),
-                    wing_id=int(wing_id),
-                    token_pk=token_pk,
+                move_fleet_member.apply_async(
+                    kwargs={
+                        'fleet_id': fleet_id,
+                        'member_id': member['character_id'],
+                        'squad_id': int(squad_id),
+                        'wing_id': int(wing_id),
+                        'token_pk': token_pk,
+                    },
+                    priority=0,  # Highest priority
                 )
 
         messages.success(request, 'Fleet updated successfully.')
@@ -124,7 +127,7 @@ def fleetmover(request, token_pk: int):
 
         destination_form = SquadDestinationForm(
             squads=[
-                (f"{wing['id']}-{squad['id']}", squad['name']) for wing in fleet_structure for squad in wing['squads']
+                (f"{wing['id']}-{squad['id']}", f"{wing['name']} -> {squad['name']}") for wing in fleet_structure for squad in wing['squads']
             ],
         )
 

@@ -6,7 +6,7 @@ from . import urls
 
 class FleettoolsMenuItemHook(MenuItemHook):
     def __init__(self):
-        super().__init__("FleetTools", "fas fa-space-shuttle", "fleettools:index", navactive=['fleettools:'])
+        super().__init__("Fleet Tools", "fas fa-space-shuttle", "fleettools:index", navactive=['fleettools:'])
 
 
 @hooks.register('menu_item_hook')
