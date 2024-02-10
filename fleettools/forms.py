@@ -2,7 +2,7 @@ from django import forms
 
 
 class SquadDestinationForm(forms.Form):
-    squad_destination = forms.ChoiceField(choices=(), required=True)
+    squad_destination = forms.ChoiceField(choices=(), required=True, label='Destination Squad')
 
     def __init__(self, squads, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -3,6 +3,7 @@ import re
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.cache import cache
 
 from allianceauth.services.hooks import get_extension_logger
 
@@ -14,6 +15,9 @@ from .tasks import move_fleet_member
 from .forms import SquadDestinationForm
 
 logger = get_extension_logger(__name__)
+
+FLEET_STRUCTURE_CACHE_TIMEOUT = 60 * 10  # 10 minutes
+FLEET_STRUCTURE_CACHE_PREFIX = 'fleet_structure'
 
 
 @login_required
@@ -64,20 +68,24 @@ def fleetmover(request, token_pk: int):
             .results()
         )
 
-        fleet_structure = (
-            esi.client
-            .Fleets
-            .get_fleets_fleet_id_wings(
-                fleet_id=fleet_id,
-                token=token.valid_access_token()
+        squads_choices = cache.get(f"{FLEET_STRUCTURE_CACHE_PREFIX}-{token_pk}")
+        if squads_choices is None:
+            fleet_structure = (
+                esi.client
+                .Fleets
+                .get_fleets_fleet_id_wings(
+                    fleet_id=fleet_id,
+                    token=token.valid_access_token()
+                )
+                .results()
             )
-            .results()
-        )
+
+            squads_choices = [
+                (f"{wing['id']}-{squad['id']}", f"{wing['name']} -> {squad['name']}") for wing in fleet_structure for squad in wing['squads']
+            ]
 
         destination_form = SquadDestinationForm(
-            [
-                (f"{wing['id']}-{squad['id']}", f"{wing['name']} -> {squad['name']}") for wing in fleet_structure for squad in wing['squads']
-            ],
+            squads_choices,
             request.POST,
         )
 
@@ -125,10 +133,14 @@ def fleetmover(request, token_pk: int):
             .results()
         )
 
+        squads_choices = [
+            (f"{wing['id']}-{squad['id']}", f"{wing['name']} -> {squad['name']}") for wing in fleet_structure for squad in wing['squads']
+        ]
+
+        cache.set(f"{FLEET_STRUCTURE_CACHE_PREFIX}-{token_pk}", squads_choices, FLEET_STRUCTURE_CACHE_TIMEOUT)
+
         destination_form = SquadDestinationForm(
-            squads=[
-                (f"{wing['id']}-{squad['id']}", f"{wing['name']} -> {squad['name']}") for wing in fleet_structure for squad in wing['squads']
-            ],
+            squads=squads_choices,
         )
 
     context = {
