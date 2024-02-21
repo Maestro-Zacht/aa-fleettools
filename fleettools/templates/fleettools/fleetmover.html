@@ -14,6 +14,15 @@
 
 {% block fleettoolscontent %}
     <div class="col-12">
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex pb-2">
+                    {% for button in reset_buttons %}
+                        <a href="{{ button.url }}" class="btn btn-outline-success mx-1">{{ button.text }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
         <form method="post"> {% csrf_token %}
             <input type="text" value="{{ fleet_id }}" name="fleet_id" hidden>
             <div class="row">

@@ -1,6 +1,6 @@
 import re
 
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, redirect, get_object_or_404, resolve_url
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.cache import cache
@@ -9,14 +9,16 @@ from allianceauth.services.hooks import get_extension_logger
 
 from esi.decorators import token_required
 from esi.models import Token
+from bravado.exception import HTTPNotFound
 
 from .provider import esi
-from .tasks import move_fleet_member
 from .forms import SquadDestinationForm
+from .models import ResetButton
+from .utils import move_fleet_members
 
 logger = get_extension_logger(__name__)
 
-FLEET_STRUCTURE_CACHE_TIMEOUT = 60 * 10  # 10 minutes
+FLEET_STRUCTURE_CACHE_TIMEOUT = 60 * 60  # 60 minutes
 FLEET_STRUCTURE_CACHE_PREFIX = 'fleet_structure'
 
 
@@ -58,27 +60,21 @@ def fleetmover(request, token_pk: int):
 
         fleet_id = request.POST['fleet_id']
 
-        fleet_members = (
-            esi.client
-            .Fleets
-            .get_fleets_fleet_id_members(
-                fleet_id=fleet_id,
-                token=token.valid_access_token()
-            )
-            .results()
-        )
-
         squads_choices = cache.get(f"{FLEET_STRUCTURE_CACHE_PREFIX}-{token_pk}")
         if squads_choices is None:
-            fleet_structure = (
-                esi.client
-                .Fleets
-                .get_fleets_fleet_id_wings(
-                    fleet_id=fleet_id,
-                    token=token.valid_access_token()
+            try:
+                fleet_structure = (
+                    esi.client
+                    .Fleets
+                    .get_fleets_fleet_id_wings(
+                        fleet_id=fleet_id,
+                        token=token.valid_access_token()
+                    )
+                    .results()
                 )
-                .results()
-            )
+            except HTTPNotFound:
+                messages.error(request, 'You are not in a fleet or you are not its boss')
+                return redirect('authentication:dashboard')
 
             squads_choices = [
                 (f"{wing['id']}-{squad['id']}", f"{wing['name']} -> {squad['name']}") for wing in fleet_structure for squad in wing['squads']
@@ -97,32 +93,28 @@ def fleetmover(request, token_pk: int):
 
         wing_id, squad_id = destination.split('-')
 
-        for member in fleet_members:
-            if move_fleet or member['wing_id'] in wings or member['squad_id'] in squads:
-                move_fleet_member.apply_async(
-                    kwargs={
-                        'fleet_id': fleet_id,
-                        'member_id': member['character_id'],
-                        'squad_id': int(squad_id),
-                        'wing_id': int(wing_id),
-                        'token_pk': token_pk,
-                    },
-                    priority=0,  # Highest priority
-                )
+        move_fleet_members(
+            token,
+            int(squad_id),
+            int(wing_id),
+            int(fleet_id),
+            lambda member: move_fleet or member['wing_id'] in wings or member['squad_id'] in squads
+        )
 
         messages.success(request, 'Fleet updated successfully.')
         return redirect('fleettools:fleetmover', token_pk=token_pk)
-    else:
-        fleet_info = (
-            esi.client
-            .Fleets
-            .get_characters_character_id_fleet(
-                character_id=token.character_id,
-                token=token.valid_access_token()
-            )
-            .results()
-        )
 
+    fleet_info = (
+        esi.client
+        .Fleets
+        .get_characters_character_id_fleet(
+            character_id=token.character_id,
+            token=token.valid_access_token()
+        )
+        .results()
+    )
+
+    try:
         fleet_structure = (
             esi.client
             .Fleets
@@ -132,21 +124,66 @@ def fleetmover(request, token_pk: int):
             )
             .results()
         )
+    except HTTPNotFound:
+        messages.error(request, 'You are not in a fleet or you are not its boss')
+        return redirect('authentication:dashboard')
 
-        squads_choices = [
-            (f"{wing['id']}-{squad['id']}", f"{wing['name']} -> {squad['name']}") for wing in fleet_structure for squad in wing['squads']
-        ]
+    squads_choices = [
+        (f"{wing['id']}-{squad['id']}", f"{wing['name']} -> {squad['name']}") for wing in fleet_structure for squad in wing['squads']
+    ]
 
-        cache.set(f"{FLEET_STRUCTURE_CACHE_PREFIX}-{token_pk}", squads_choices, FLEET_STRUCTURE_CACHE_TIMEOUT)
+    cache.set(f"{FLEET_STRUCTURE_CACHE_PREFIX}-{token_pk}", squads_choices, FLEET_STRUCTURE_CACHE_TIMEOUT)
 
-        destination_form = SquadDestinationForm(
-            squads=squads_choices,
-        )
+    destination_form = SquadDestinationForm(squads=squads_choices)
+
+    destinations = {
+        (wing['id'], squad['id']): squad['name']
+        for wing in fleet_structure
+        for squad in wing['squads']
+        if ResetButton.objects.filter(wing_name=wing['name'], squad_name=squad['name']).exists()
+    }
+
+    reset_buttons = [
+        {
+            'url': resolve_url(
+                'fleettools:buttonmover',
+                token_pk=token_pk,
+                wing_id=wing['id'],
+                squad_destination_id=destination_squad,
+                wing_destination_id=destination_wing
+            ),
+            'text': f"Reset {wing['name']} to {squad_name}",
+        } for wing in fleet_structure for (destination_wing, destination_squad), squad_name in destinations.items()
+    ]
 
     context = {
         'fleet': fleet_structure,
         'fleet_id': fleet_info['fleet_id'],
         'destination_form': destination_form,
+        'reset_buttons': reset_buttons,
     }
 
     return render(request, 'fleettools/fleetmover.html', context=context)
+
+
+@login_required
+def buttonmover(request, token_pk: int, wing_id: int, squad_destination_id: int, wing_destination_id: int):
+    if request.method != 'POST':
+        return redirect('fleettools:fleetmover', token_pk=token_pk)
+
+    token = get_object_or_404(Token, pk=token_pk)
+    if token.user != request.user:
+        return redirect('fleettools:fleetmoverlogin')
+
+    fleet_id = request.POST['fleet_id']
+
+    move_fleet_members(
+        token,
+        squad_destination_id,
+        wing_destination_id,
+        fleet_id,
+        lambda member: member['wing_id'] == wing_id
+    )
+
+    messages.success(request, 'Fleet updated successfully.')
+    return redirect('fleettools:fleetmover', token_pk=token_pk)
