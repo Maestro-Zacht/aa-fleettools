@@ -144,17 +144,19 @@ def fleetmover(request, token_pk: int):
     }
 
     reset_buttons = [
-        {
-            'url': resolve_url(
-                'fleettools:buttonmover',
-                token_pk=token_pk,
-                fleet_id=fleet_info['fleet_id'],
-                wing_id=wing['id'],
-                squad_destination_id=destination_squad,
-                wing_destination_id=destination_wing
-            ),
-            'text': f"Reset {wing['name']} to {squad_name}",
-        } for wing in fleet_structure for (destination_wing, destination_squad), squad_name in destinations.items()
+        [
+            {
+                'url': resolve_url(
+                    'fleettools:buttonmover',
+                    token_pk=token_pk,
+                    fleet_id=fleet_info['fleet_id'],
+                    wing_id=wing['id'],
+                    squad_destination_id=destination_squad,
+                    wing_destination_id=destination_wing
+                ),
+                'text': f"Reset {wing['name']} to {squad_name}",
+            } for wing in fleet_structure
+        ] for (destination_wing, destination_squad), squad_name in destinations.items()
     ]
 
     context = {
