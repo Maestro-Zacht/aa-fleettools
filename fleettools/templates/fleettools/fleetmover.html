@@ -14,17 +14,26 @@
 
 {% block fleettoolscontent %}
     <div class="col-12">
-        <div class="row">
-            {% for line in reset_buttons %}
-                <div class="col-12">
-                    <div class="d-flex pb-2">
-                        {% for button in line %}
-                            <a href="{{ button.url }}" class="btn btn-outline-success mx-1">{{ button.text }}</a>
+        {% if reset_buttons|length > 0 %}
+            <div class="card mb-3">
+                <div class="card-header text-center">
+                    Reset Wings
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for line in reset_buttons %}
+                            <div class="col-12">
+                                <div class="d-flex justify-content-around pb-2">
+                                    {% for button in line %}
+                                        <a href="{{ button.url }}" class="btn btn-outline-success mx-1">{{ button.text }}</a>
+                                    {% endfor %}
+                                </div>
+                            </div>
                         {% endfor %}
                     </div>
                 </div>
-            {% endfor %}
-        </div>
+            </div>
+        {% endif %}
         <form method="post"> {% csrf_token %}
             <input type="text" value="{{ fleet_id }}" name="fleet_id" hidden>
             <div class="row">
