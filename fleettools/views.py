@@ -148,6 +148,7 @@ def fleetmover(request, token_pk: int):
             'url': resolve_url(
                 'fleettools:buttonmover',
                 token_pk=token_pk,
+                fleet_id=fleet_info['fleet_id'],
                 wing_id=wing['id'],
                 squad_destination_id=destination_squad,
                 wing_destination_id=destination_wing
@@ -167,15 +168,10 @@ def fleetmover(request, token_pk: int):
 
 
 @login_required
-def buttonmover(request, token_pk: int, wing_id: int, squad_destination_id: int, wing_destination_id: int):
-    if request.method != 'POST':
-        return redirect('fleettools:fleetmover', token_pk=token_pk)
-
+def buttonmover(request, token_pk: int, fleet_id: int, wing_id: int, squad_destination_id: int, wing_destination_id: int):
     token = get_object_or_404(Token, pk=token_pk)
     if token.user != request.user:
         return redirect('fleettools:fleetmoverlogin')
-
-    fleet_id = request.POST['fleet_id']
 
     move_fleet_members(
         token,
