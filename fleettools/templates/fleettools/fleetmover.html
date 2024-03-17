@@ -1,5 +1,8 @@
 {% extends "fleettools/base.html" %}
-{% load bootstrap %}
+{% load django_bootstrap5 %}
+{% load static %}
+
+{% block page_title %}Fleet Mover{% endblock page_title %}
 
 {% block extra_css %}
     <style>
@@ -11,29 +14,94 @@
 
 {% block fleettoolscontent %}
     <div class="col-12">
+        {% if reset_buttons|length > 0 %}
+            <div class="card mb-3">
+                <div class="card-header text-center">
+                    Reset Wings
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for line in reset_buttons %}
+                            <div class="col-12">
+                                <div class="d-flex justify-content-around pb-2">
+                                    {% for button in line %}
+                                        <a href="{{ button.url }}" class="btn btn-outline-success mx-1">{{ button.text }}</a>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
         <form method="post"> {% csrf_token %}
             <input type="text" value="{{ fleet_id }}" name="fleet_id" hidden>
-            <ul>
-                <li>
-                    <label><input type="checkbox" name="move-fleet">Fleet</label>
-                    <ul>
-                        {% for wing in fleet %}
-                            <li>
-                                <label><input type="checkbox" name="wing-{{ wing.id }}">{{ wing.name }}</label>
-                                <ul>
-                                    {% for squad in wing.squads %}
-                                        <li>
-                                            <label><input type="checkbox" name="squad-{{ squad.id }}">{{ squad.name }}</label>
-                                        </li>
-                                    {% endfor %}
-                                </ul>
-                            </li>
-                        {% endfor %}
-                    </ul>
-                </li>
-            </ul>
-            {{ destination_form|bootstrap }}
-            <button class="btn btn-primary" type="submit">Submit</button>
+            <div class="row">
+                <div class="col-lg-5">
+                    <div class="card">
+                        <div class="card-body">
+                            <ul class="ps-0">
+                                <li>
+                                    <div class="form-check">
+                                        <label class="form-check-label">
+                                            <input type="checkbox" class="form-check-input" name="move-fleet">
+                                            Fleet
+                                        </label>
+                                    </div>
+                                    <ul>
+                                        {% for wing in fleet %}
+                                            <li>
+                                                <div class="form-check">
+                                                    <label class="form-check-label">
+                                                        <input type="checkbox" class="form-check-input" name="wing-{{ wing.id }}">
+                                                        {{ wing.name }}
+                                                    </label>
+                                                </div>
+                                                <ul>
+                                                    {% for squad in wing.squads %}
+                                                        <li>
+                                                            <div class="form-check">
+                                                                <label class="form-check-label">
+                                                                    <input type="checkbox" class="form-check-input" name="squad-{{ squad.id }}">
+                                                                    {{ squad.name }}
+                                                                </label>
+                                                            </div>
+                                                        </li>
+                                                    {% endfor %}
+                                                </ul>
+                                            </li>
+                                        {% endfor %}
+                                    </ul>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-2">
+                    <div class="d-flex justify-content-center align-items-center h-100">
+                        <button class="btn btn-outline-info" type="submit" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Move Selection"><i class="fa-solid fa-right-long"></i></button>
+                    </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="d-flex justify-content-center align-items-center h-100">
+                        <div class="card flex-grow-1">
+                            <div class="card-body">
+                                {% bootstrap_form destination_form %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </form>
     </div>
 {% endblock fleettoolscontent %}
+
+{% block extra_javascript %}
+    <script src="{% static "fleettools/js/nested-checkboxes.js" %}"></script>
+{% endblock extra_javascript %}
+
+{% block extra_script %}
+    $(document).ready(function() {
+        $('[data-bs-toggle="tooltip"]').tooltip();
+    });
+{% endblock extra_script %}
